@@ -55,7 +55,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.glassremote.data.bluetooth.BluetoothHidController
 import com.glassremote.data.macro.MacroIds
 import com.glassremote.ui.dashboard.DashboardScreen
 import com.glassremote.ui.link.LinkScreen
@@ -78,7 +77,6 @@ import javax.inject.Inject
 class MainActivity : ComponentActivity() {
 
     @Inject lateinit var haptics: Haptics
-    @Inject lateinit var bluetooth: BluetoothHidController
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -86,7 +84,6 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(AndroidColor.TRANSPARENT),
         )
-        bluetooth.start() // registers as a Bluetooth remote if permission is already granted
         setContent {
             val settingsVm: SettingsViewModel = hiltViewModel()
             val style by settingsVm.style.collectAsStateWithLifecycle()
