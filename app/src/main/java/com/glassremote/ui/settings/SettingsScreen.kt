@@ -23,6 +23,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -67,6 +68,12 @@ class SettingsViewModel @Inject constructor(
 
     val device: StateFlow<TvDevice?> = store.lastDevice
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val muteOnCall: StateFlow<Boolean> = settings.muteOnIncomingCall
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val autoHdmi2: StateFlow<Boolean> = settings.autoHdmi2OnJioFocus
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    fun setMuteOnCall(v: Boolean) { viewModelScope.launch { settings.setMuteOnIncomingCall(v) } }
+    fun setAutoHdmi2(v: Boolean) { viewModelScope.launch { settings.setAutoHdmi2OnJioFocus(v) } }
 
     fun setFontScale(v: Float) { viewModelScope.launch { settings.setFontScale(v) } }
     fun setWeight(v: Int) { viewModelScope.launch { settings.setWeight(v) } }
@@ -80,6 +87,8 @@ class SettingsViewModel @Inject constructor(
 fun SettingsScreen(vm: SettingsViewModel) {
     val style by vm.style.collectAsStateWithLifecycle()
     val device by vm.device.collectAsStateWithLifecycle()
+    val muteOnCall by vm.muteOnCall.collectAsStateWithLifecycle()
+    val autoHdmi2 by vm.autoHdmi2.collectAsStateWithLifecycle()
     val ctx = LocalContext.current
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -152,6 +161,23 @@ fun SettingsScreen(vm: SettingsViewModel) {
 
         Section("Corner radius") {
             LabeledSlider(style.radius, 0.2f..1.4f, { "${(it * 100).roundToInt()}%" }) { vm.setRadius(it) }
+        }
+
+        Section("Automation") {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(Modifier.weight(1f)) {
+                    Text("Mute on Incoming Call", color = Color.White)
+                    Text("Requires phone-state permission and a configured mute handler", color = Color.White.copy(alpha = .55f), fontSize = 12.sp)
+                }
+                Switch(checked = muteOnCall, onCheckedChange = vm::setMuteOnCall)
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(Modifier.weight(1f)) {
+                    Text("Auto Source-Switch to HDMI 2", color = Color.White)
+                    Text("Switch input when Jio focus is selected", color = Color.White.copy(alpha = .55f), fontSize = 12.sp)
+                }
+                Switch(checked = autoHdmi2, onCheckedChange = vm::setAutoHdmi2)
+            }
         }
 
         Section("Connection") {
