@@ -2,6 +2,7 @@ package com.glassremote.data.repository
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -23,6 +24,18 @@ class SettingsRepository @Inject constructor(@ApplicationContext private val ctx
     private val kBg = stringPreferencesKey("background")
     private val kImage = stringPreferencesKey("image_uri")
     private val kRadius = floatPreferencesKey("radius")
+    private val kMuteOnCall = booleanPreferencesKey("mute_on_incoming_call")
+    private val kAutoHdmi2 = booleanPreferencesKey("auto_hdmi2_on_jio_focus")
+
+    val muteOnIncomingCall: Flow<Boolean> = ctx.settingsStore.data.map { it[kMuteOnCall] ?: false }
+    val autoHdmi2OnJioFocus: Flow<Boolean> = ctx.settingsStore.data.map { it[kAutoHdmi2] ?: false }
+
+    suspend fun setMuteOnIncomingCall(enabled: Boolean) {
+        ctx.settingsStore.edit { it[kMuteOnCall] = enabled }
+    }
+    suspend fun setAutoHdmi2OnJioFocus(enabled: Boolean) {
+        ctx.settingsStore.edit { it[kAutoHdmi2] = enabled }
+    }
 
     val style: Flow<GlassStyle> = ctx.settingsStore.data.map { p ->
         GlassStyle(
