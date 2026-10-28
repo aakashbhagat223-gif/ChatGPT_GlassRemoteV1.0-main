@@ -34,9 +34,9 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 
-@HiltViewModel
 enum class ControlTarget { XIAOMI_TV, JIO_BOX }
 
+@HiltViewModel
 class RemoteViewModel @Inject constructor(
     private val repo: TvRepository,
     private val store: PairedDeviceStore,
