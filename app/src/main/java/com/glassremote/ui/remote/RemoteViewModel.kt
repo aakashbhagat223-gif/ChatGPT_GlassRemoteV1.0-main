@@ -35,6 +35,8 @@ import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
 
 @HiltViewModel
+enum class ControlTarget { XIAOMI_TV, JIO_BOX }
+
 class RemoteViewModel @Inject constructor(
     private val repo: TvRepository,
     private val store: PairedDeviceStore,
@@ -43,7 +45,38 @@ class RemoteViewModel @Inject constructor(
     private val recorder: MacroRecorder,
     private val adb: AdbManager,
     private val nativeActions: NativeActions,
+    private val settings: com.glassremote.data.repository.SettingsRepository,
 ) : ViewModel() {
+
+    private val _controlTarget = MutableStateFlow(ControlTarget.XIAOMI_TV)
+    val controlTarget: StateFlow<ControlTarget> = _controlTarget.asStateFlow()
+    private val _actionError = MutableStateFlow<String?>(null)
+    val actionError: StateFlow<String?> = _actionError.asStateFlow()
+
+    fun selectControlTarget(target: ControlTarget) {
+        _controlTarget.value = target
+        if (target == ControlTarget.JIO_BOX) {
+            viewModelScope.launch {
+                if (settings.autoHdmi2OnJioFocus.first() && adb.state.value.connected) {
+                    runCatching { nativeActions.watchJio() }
+                        .onFailure { _actionError.value = it.message ?: "HDMI switch failed" }
+                }
+            }
+        }
+    }
+
+    fun sendTextDirect(text: String) {
+        viewModelScope.launch {
+            adb.injectText(text).onFailure { _actionError.value = it.message ?: "Text injection failed" }
+        }
+    }
+
+    fun watchJio() {
+        viewModelScope.launch {
+            runCatching { nativeActions.watchJio() }
+                .onFailure { _actionError.value = it.message ?: "Watch Jio failed" }
+        }
+    }
 
     val status: StateFlow<RemoteStatus> = repo.status
 
@@ -101,6 +134,7 @@ class RemoteViewModel @Inject constructor(
     }
 
     fun selectTarget(target: TvDevice) {
+        _controlTarget.value = if (target.id == KnownTargets.Jio.id || target.host == KnownTargets.Jio.host) ControlTarget.JIO_BOX else ControlTarget.XIAOMI_TV
         if (_activeTarget.value.host == target.host) return
         viewModelScope.launch {
             _activeTarget.value = target
@@ -151,7 +185,16 @@ class RemoteViewModel @Inject constructor(
 
     fun key(code: Int) {
         recorder.onKey(code)
-        viewModelScope.launch { runCatching { repo.sendKey(code, KeyDirection.Short) } }
+        val volumeKey = code == KeyEvent.KEYCODE_VOLUME_UP ||
+            code == KeyEvent.KEYCODE_VOLUME_DOWN || code == KeyEvent.KEYCODE_VOLUME_MUTE
+        viewModelScope.launch {
+            if (_controlTarget.value == ControlTarget.JIO_BOX && !volumeKey && adb.state.value.connected) {
+                adb.injectGlobalAdbKey(code).onFailure { _actionError.value = it.message ?: "ADB key failed" }
+            } else {
+                runCatching { repo.sendKey(code, KeyDirection.Short) }
+                    .onFailure { _actionError.value = it.message ?: "Remote key failed" }
+            }
+        }
     }
 
     fun launchApp(target: String) {
