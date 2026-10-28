@@ -46,6 +46,11 @@ class AdbManager @Inject constructor(
 ) {
     private val prefs = ctx.getSharedPreferences("adb", Context.MODE_PRIVATE)
 
+    companion object {
+        const val XIAOMI_HOST = "192.168.31.116"
+        const val ADB_PORT = 5555
+    }
+
     private val _state = MutableStateFlow(AdbState())
     val state: StateFlow<AdbState> = _state.asStateFlow()
 
@@ -76,15 +81,11 @@ class AdbManager @Inject constructor(
     /** Must be called with [lock] held. */
     private suspend fun openLocked(): Dadb {
         val saved = store.lastDevice.first()
-        var host = lastHost.ifBlank { saved?.host ?: throw IllegalStateException("No TV address") }
-        if (!resolver.reachable(host, lastPort)) {
-            if (saved != null) {
-                val fresh = resolver.refresh(saved)
-                if (fresh.host != host) host = fresh.host
-            }
-            if (!resolver.reachable(host, lastPort)) {
-                throw IllegalStateException("TV not reachable at $host:$lastPort")
-            }
+        val host = XIAOMI_HOST
+        lastHost = XIAOMI_HOST
+        lastPort = ADB_PORT
+        if (!resolver.reachable(host, ADB_PORT)) {
+            throw IllegalStateException("Xiaomi TV not reachable at $host:$ADB_PORT")
         }
         lastHost = host
         prefs.edit().putString("host", host).apply()
@@ -98,6 +99,9 @@ class AdbManager @Inject constructor(
     suspend fun connect(host: String, port: Int): Result<Unit> = withContext(Dispatchers.IO) {
         lock.withLock {
             runCatching {
+                require(host == XIAOMI_HOST && port == ADB_PORT) {
+                    "ADB is restricted to Xiaomi TV $XIAOMI_HOST:$ADB_PORT"
+                }
                 runCatching { dadb?.close() }
                 dadb = null
                 lastHost = host
@@ -131,6 +135,23 @@ class AdbManager @Inject constructor(
             }
             throw last ?: IllegalStateException("ADB error")
         }
+    }
+
+    suspend fun injectGlobalAdbKey(keyCode: Int): Result<String> = runCatching {
+        require(keyCode in 0..288) { "Invalid Android keycode" }
+        check(lastHost == XIAOMI_HOST) { "ADB target is not the configured Xiaomi TV" }
+        shell("input keyevent $keyCode")
+    }
+
+    suspend fun injectText(text: String): Result<String> = runCatching {
+        require(text.length <= 500) { "Text exceeds 500 characters" }
+        require(text.none { it == '\n' || it == '\r' || it == '\u0000' || it.isISOControl() }) {
+            "Text contains unsupported control characters"
+        }
+        check(lastHost == XIAOMI_HOST) { "ADB target is not the configured Xiaomi TV" }
+        val encoded = text.replace("%", "\\%").replace(" ", "%s")
+        val quoted = "'" + encoded.replace("'", "'\\''") + "'"
+        shell("input text $quoted")
     }
 
     fun disconnect() {
@@ -193,8 +214,16 @@ class NativeActions @Inject constructor(
     }
 
     // ---- typing (letters and space only; they go through `input text`) ----
-    suspend fun typeText(text: String): String = adb.shell("input text ${text.replace(" ", "%s")}")
-    suspend fun keyEvent(code: Int): String = adb.shell("input keyevent $code")
+    suspend fun typeText(text: String): String = adb.injectText(text).getOrThrow()
+    suspend fun keyEvent(code: Int): String = adb.injectGlobalAdbKey(code).getOrThrow()
+
+    suspend fun watchJio(): String {
+        adb.injectGlobalAdbKey(android.view.KeyEvent.KEYCODE_POWER).getOrThrow()
+        kotlinx.coroutines.delay(1_200)
+        val input = savedHdmi2()
+        require(input.isNotBlank()) { "Configure the HDMI 2 input ID in the app first" }
+        return switchInput(input)
+    }
 
     // ---- backlight: the TV's own setting (global picture_backlight) ----
     suspend fun readBacklight(): Int? = adb.shell("settings get global $BACKLIGHT_KEY").trim().toIntOrNull()
