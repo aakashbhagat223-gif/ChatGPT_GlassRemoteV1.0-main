@@ -183,6 +183,7 @@ fun RemoteScreen(vm: RemoteViewModel = hiltViewModel()) {
                     }
                 }
             }
+            GlassAutomationPanel(onSendText = vm::sendTextDirect, onWatchJio = vm::watchJio)
         }
 
         if (pairingDialog) {
